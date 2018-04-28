@@ -4,6 +4,8 @@ import numpy.linalg
 import numpy as np
 import math
 
+import pyqtgraph as pg
+
 class AccelFrame:
     """
     Describes an Acceleration frame.
@@ -44,11 +46,13 @@ class AngleFrame:
     """
 
     def __init__(self, byts):
-        """Returns a new AngleFrame object from the bytearray `byts`"""
+        """Returns a new AngleFrame object from the bytearray `byts`
+        Angles are in degrees.
+        """
 
-        self.roll = int.from_bytes(byts[2:4], byteorder='little', signed=True) / 32768
-        self.pitch = int.from_bytes(byts[4:6], byteorder='little', signed=True) / 32768
-        self.yaw = int.from_bytes(byts[6:8], byteorder='little', signed=True) / 32768
+        self.roll = (int.from_bytes(byts[2:4], byteorder='little', signed=True) / 32768) * 180
+        self.pitch = (int.from_bytes(byts[4:6], byteorder='little', signed=True) / 32768) * 180
+        self.yaw = (int.from_bytes(byts[6:8], byteorder='little', signed=True) / 32768) * 180
 
         self.temp = int.from_bytes(byts[8:10], byteorder='little', signed=True) /100
 
@@ -56,6 +60,13 @@ class AngleFrame:
 
     def __str__(self):
         return "angle=(roll:{:10.4f}, pitch:{:10.4f}, yaw:{:10.4f}), temp={:10.4f}".format(self.roll, self.pitch, self.yaw, self.temp)
+
+    def get_transform(self):
+         tr = pg.SRTTransform3D()
+         tr.rotate(self.yaw , (0, 0, 1))
+         tr.rotate(self.pitch, (0, 1, 0))
+         tr.rotate(self.roll, (1, 0, 0))
+         return tr
 
     def get_rotation_matrix(self):
         """Returns the corresponding rotation matrix Z-Y-X."""
