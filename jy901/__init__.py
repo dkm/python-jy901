@@ -160,6 +160,64 @@ FRAME_MAP = {
     0x56 : AtmosphericFrame,
 }
 
+import random
+import time
+
+class DumbDevice:
+    """
+    Same interface, simply returns random data.
+    """
+
+    def __init__(self, freq):
+
+        self.next_frame_idx = 0
+        self.period = 1 / freq
+
+        self.cur_angle = (0,0,0)
+        self.cur_temp = 25
+        self.cur_acc = (0,0,-1)
+
+    def next_frame(self):
+        self.next_frame_idx = (self.next_frame_idx + 1) % 2
+        time.sleep(self.period)
+
+        if self.next_frame_idx == 0:
+            return self.next_accel()
+        else:
+            return self.next_angle()
+
+    def next_accel(self):
+        frame = bytearray()
+        frame.append(0x55)
+        frame.append(0x51)
+        ## Ax
+        frame += int((self.cur_acc[0]/16)*32768).to_bytes(2, byteorder='little', signed=True)
+        ## Ay
+        frame += int((self.cur_acc[1]/16)*32768).to_bytes(2, byteorder='little', signed=True)
+        ## Az
+        frame += int((self.cur_acc[2]/16)*32768).to_bytes(2, byteorder='little', signed=True)
+        ## Temp
+        frame += self.cur_temp.to_bytes(2, byteorder='little', signed=True)
+
+        self.cur_acc = list(map(lambda x: (x + (random.random()/10-0.05))%4, self.cur_acc))
+        return AccelFrame(frame)
+
+    def next_angle(self):
+        frame = bytearray()
+        frame.append(0x55)
+        frame.append(0x53)
+        ## roll / 180 * 32768
+        frame += int(((self.cur_angle[0]/180)*32768)).to_bytes(2, byteorder='little', signed=True)
+        ## pitch
+        frame += int(((self.cur_angle[1]/180)*32768)).to_bytes(2, byteorder='little', signed=True)
+        ## yaw
+        frame += int(((self.cur_angle[2]/180)*32768)).to_bytes(2, byteorder='little', signed=True)
+        ## Temp
+        frame += self.cur_temp.to_bytes(2, byteorder='little', signed=True)
+
+        self.cur_angle = list(map(lambda x: (x+(random.random()-0.5)) , self.cur_angle))
+        return AngleFrame(frame)
+
 class JY901:
     """
     Driver for JY901 device.
