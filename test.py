@@ -9,98 +9,137 @@ import numpy as np
 
 import time
 
-from jy901 import JY901,AngleFrame,AccelFrame
+from jy901 import JY901,AngleFrame,AccelFrame,DumbDevice
 
 verbose_output = False
 
-def drawpqt(dev):
-    global verbose_output
+class DrawPQT:
+    def __init__(self, dev, verbose=False):
+        self.verbose_output = verbose
+        self.dev = dev
 
-    from pyqtgraph.Qt import QtCore, QtGui
-    import pyqtgraph.opengl as gl
-    import pyqtgraph as pg
+    def update_scroll(self, acc):
+        self.acc_norm_data[:-1] = self.acc_norm_data[1:]
+        self.acc_norm_data[-1] = np.linalg.norm(acc)
+        self.acc_norm.setData(self.acc_norm_data)
 
-    app = QtGui.QApplication([])
+        self.acc_x_data[:-1] = self.acc_x_data[1:]
+        self.acc_x_data[-1] = acc[0]
+        self.acc_x.setData(self.acc_x_data)
 
-    view = gl.GLViewWidget()
-    view.show()
-    
-    xgrid = gl.GLGridItem()
-    ygrid = gl.GLGridItem()
-    zgrid = gl.GLGridItem()
-    view.addItem(xgrid)
-    view.addItem(ygrid)
-    view.addItem(zgrid)
+        self.acc_y_data[:-1] = self.acc_y_data[1:]
+        self.acc_y_data[-1] = acc[1]
+        self.acc_y.setData(self.acc_y_data)
 
-    ## rotate x and y grids to face the correct direction
-    xgrid.rotate(90, 0, 1, 0)
-    ygrid.rotate(90, 1, 0, 0)
+        self.acc_z_data[:-1] = self.acc_z_data[1:]
+        self.acc_z_data[-1] = acc[2]
+        self.acc_z.setData(self.acc_z_data)
 
-    ## scale each grid differently
-    xgrid.scale(0.2, 0.1, 0.1)
-    ygrid.scale(0.2, 0.1, 0.1)
-    zgrid.scale(0.1, 0.2, 0.1)
 
-    ## Example 1:
-    ## Array of vertex positions and array of vertex indexes defining faces
-    ## Colors are specified per-face
+    def update(self):
 
-    # verts = np.array([
-    #     [0, 0, 0],
-    #     [2, 0, 0],
-    #     [1, 2, 0],
-    #     [1, 1, 1],
-    # ])
-    # faces = np.array([
-    #     [0, 1, 2],
-    #     [0, 1, 3],
-    #     [0, 2, 3],
-    #     [1, 2, 3]
-    # ])
-    # colors = np.array([
-    #     [1, 0, 0, 0.3],
-    #     [0, 1, 0, 0.3],
-    #     [0, 0, 1, 0.3],
-    #     [1, 1, 0, 0.3]
-    # ])
-
-    # ## Mesh item will automatically compute face normals.
-    # m1 = gl.GLMeshItem(vertexes=verts, faces=faces, faceColors=colors, smooth=False)
-    # m1.translate(2, 2, 2)
-    # m1.setGLOptions('additive')
-
-    init_accel = np.array([
-        [0,0,0],
-        [0,0,-1]
-    ])
-    accel = gl.GLLinePlotItem(pos=init_accel, width=3)
-    axis = gl.GLAxisItem()
-
-    # view.addItem(m1)
-    view.addItem(axis)
-    view.addItem(accel)
-
-    def update():
-        angle = dev.next_angle()
+        ## update 3D view
+        angle = self.dev.next_angle()
         rot = angle.get_transform()
 
-        cur_acc = dev.next_accel().accel
-
+        cur_acc = self.dev.next_accel().accel
         new_acc = np.append([[0,0,0]], [cur_acc], axis=0)
 
-        if verbose_output: print(cur_acc)
-        if verbose_output: print(angle)
+        if self.verbose_output: print(cur_acc)
+        if self.verbose_output: print(angle)
 
-        accel.setData(pos=new_acc)
-        accel.setTransform(rot)
-        axis.setTransform(rot)
+        self.accel.setData(pos=new_acc)
+        self.accel.setTransform(rot)
+        self.axis.setTransform(rot)
         # m1.setTransform(rot)        
 
-    timer = QtCore.QTimer()
-    timer.timeout.connect(update)
-    timer.start(10)
-    
-    QtGui.QApplication.instance().exec_()
+        ## update scrolling data
+        self.update_scroll(cur_acc)
+
+    def drawpqt(self, dev):
+
+        from pyqtgraph.Qt import QtCore, QtGui
+        import pyqtgraph.opengl as gl
+        import pyqtgraph as pg
+        from pyqtgraph.dockarea import DockArea,Dock
+
+        app = QtGui.QApplication([])
+
+        ## window with scrolling data
+        self.win_scroll = pg.GraphicsWindow()
+        self.win_scroll.setWindowTitle('Scroll data')
+
+        self.acc_norm_plt = self.win_scroll.addPlot()
+        self.acc_x_plt = self.win_scroll.addPlot()
+        self.acc_y_plt = self.win_scroll.addPlot()
+        self.acc_z_plt = self.win_scroll.addPlot()
+
+        self.acc_norm_data = np.random.normal(size=300)
+        self.acc_x_data = np.random.normal(size=300)
+        self.acc_y_data = np.random.normal(size=300)
+        self.acc_z_data = np.random.normal(size=300)
+
+        self.acc_norm = self.acc_norm_plt.plot(self.acc_norm_data)
+        self.acc_x = self.acc_x_plt.plot(self.acc_x_data)
+        self.acc_y = self.acc_y_plt.plot(self.acc_y_data)
+        self.acc_z = self.acc_z_plt.plot(self.acc_z_data)
+
+        ## Window with buttons
+        # self.win_dock = QtGui.QMainWindow()
+        # area = DockArea()
+        # self.win_dock.setCentralWidget(area)
+        # self.win_dock.resize(1000,500)
+        # self.win_dock.setWindowTitle('pyqtgraph example: dockarea')
+        # d1 = Dock("Dock1", size=(1, 1))     ## give this dock the minimum possible size
+        # area.addDock(d1, 'left')      ## place d1 at left edge of dock area (it will fill the whole space since t
+        # w1 = pg.LayoutWidget()
+        # saveBtn = QtGui.QPushButton('Save dock state')
+
+        # def save():
+        #     print("prout")
+        # saveBtn.clicked.connect(save)
+
+        # w1.addWidget(saveBtn, row=1, col=0)
+        # d1.addWidget(w1)
+        # self.win_dock.show()
+
+        ## window with 3D view
+        view = gl.GLViewWidget()
+        view.show()
+
+        xgrid = gl.GLGridItem()
+        ygrid = gl.GLGridItem()
+        zgrid = gl.GLGridItem()
+        view.addItem(xgrid)
+        view.addItem(ygrid)
+        view.addItem(zgrid)
+
+        ## rotate x and y grids to face the correct direction
+        xgrid.rotate(90, 0, 1, 0)
+        ygrid.rotate(90, 1, 0, 0)
+
+        ## scale each grid differently
+        xgrid.scale(0.2, 0.1, 0.1)
+        ygrid.scale(0.2, 0.1, 0.1)
+        zgrid.scale(0.1, 0.2, 0.1)
+
+        init_accel = np.array([
+            [0,0,0],
+            [0,0,-1]
+        ])
+
+        self.accel = gl.GLLinePlotItem(pos=init_accel, width=3)
+        self.axis = gl.GLAxisItem()
+
+        # view.addItem(m1)
+        view.addItem(self.axis)
+        view.addItem(self.accel)
+
+        timer = QtCore.QTimer()
+        timer.timeout.connect(self.update)
+        timer.start(10)
+
+        QtGui.QApplication.instance().exec_()
 
 def draw2d(dev, interval, window_width):
     import matplotlib.pyplot as plt
@@ -214,6 +253,9 @@ class ThreadWrap(threading.Thread):
 
 parser = argparse.ArgumentParser(description='CWT901CL utility.')
 
+parser.add_argument('--dumb-device', action='store_true',
+                    help='Do not use real data, use random.')
+
 parser.add_argument('--device', type=str, default='/dev/rfcomm0',
                     help='tty device')
 
@@ -243,10 +285,13 @@ parser.add_argument('--mpl-draw-window', type=int, default=20,
 
 args = parser.parse_args()
 
-ser = serial.Serial(args.device, args.rate)
-
-jy901_dev = JY901(ser)
-orig_dev = jy901_dev
+if args.dumb_device:
+    jy901_dev = DumbDevice(10)
+    orig_dev = jy901_dev
+else:
+    ser = serial.Serial(args.device, args.rate)
+    jy901_dev = JY901(ser)
+    orig_dev = jy901_dev
 
 if args.verbose:
     verbose_output = True
@@ -261,7 +306,8 @@ if args.mpl_draw:
 elif args.mpl_draw3d:
     draw3d(jy901_dev, args.mpl_draw_interval, args.mpl_draw_window)
 elif args.pqg_draw:
-    drawpqt(jy901_dev)
+    dpqt = DrawPQT(jy901_dev, verbose_output)
+    dpqt.drawpqt(jy901_dev)
 elif not args.use_threads:
     while True:
         f = jy901_dev.next_frame()
@@ -271,6 +317,7 @@ else:
     jy901_dev.join()
     print("Doing nothing")
     
-ser.close()
+if not args.dumb_device:
+    ser.close()
 
 
