@@ -2,8 +2,12 @@
 
 import argparse
 import serial
+import sys
+import json
+import pickle
 
 import threading
+import datetime
 
 import numpy as np
 
@@ -19,25 +23,16 @@ class DrawPQT:
         self.dev = dev
 
     def update_scroll(self, acc):
-        self.acc_norm_data[:-1] = self.acc_norm_data[1:]
-        self.acc_norm_data[-1] = np.linalg.norm(acc)
-        self.acc_norm.setData(self.acc_norm_data)
+        self.plots['norm'][1][:-1] = self.plots['norm'][1][1:]
+        self.plots['norm'][1][-1] = np.linalg.norm(acc)
+        self.plots['norm'][0].setData(self.plots['norm'][1])
 
-        self.acc_x_data[:-1] = self.acc_x_data[1:]
-        self.acc_x_data[-1] = acc[0]
-        self.acc_x.setData(self.acc_x_data)
-
-        self.acc_y_data[:-1] = self.acc_y_data[1:]
-        self.acc_y_data[-1] = acc[1]
-        self.acc_y.setData(self.acc_y_data)
-
-        self.acc_z_data[:-1] = self.acc_z_data[1:]
-        self.acc_z_data[-1] = acc[2]
-        self.acc_z.setData(self.acc_z_data)
-
+        for (i,p) in enumerate(['x', 'y', 'z']):
+            self.plots[p][1][:-1] = self.plots[p][1][1:]
+            self.plots[p][1][-1] = acc[i]
+            self.plots[p][0].setData(self.plots[p][1])
 
     def update(self):
-
         ## update 3D view
         angle = self.dev.next_angle()
         rot = angle.get_transform()
@@ -56,6 +51,16 @@ class DrawPQT:
         ## update scrolling data
         self.update_scroll(cur_acc)
 
+    def buttonClicked(self, btn):
+        if btn.isChecked():
+            btn.setText("Recording")
+            self.text.setReadOnly(True)
+            self.dev.start_record(self.text.text())
+        else:
+            btn.setText("Start")
+            self.text.setReadOnly(False)
+            self.dev.stop_record()
+
     def drawpqt(self, dev):
 
         from pyqtgraph.Qt import QtCore, QtGui
@@ -66,53 +71,27 @@ class DrawPQT:
         app = QtGui.QApplication([])
 
         ## window with scrolling data
-        self.win_scroll = pg.GraphicsWindow()
-        self.win_scroll.setWindowTitle('Scroll data')
+        win_scroll = pg.GraphicsWindow()
+        win_scroll.setWindowTitle('Scroll data')
 
-        self.acc_norm_plt = self.win_scroll.addPlot()
-        self.acc_x_plt = self.win_scroll.addPlot()
-        self.acc_y_plt = self.win_scroll.addPlot()
-        self.acc_z_plt = self.win_scroll.addPlot()
+        self.plots = {}
+        for p in  ['x', 'y', 'z', 'norm']:
+            plt = win_scroll.addPlot()
+            plt.setRange(xRange=(0,300), yRange=(-6,6), disableAutoRange=True)
+            pltdata = np.random.normal(size=300)
 
-        self.acc_norm_data = np.random.normal(size=300)
-        self.acc_x_data = np.random.normal(size=300)
-        self.acc_y_data = np.random.normal(size=300)
-        self.acc_z_data = np.random.normal(size=300)
+            self.plots[p] = (plt.plot(pltdata), pltdata)
 
-        self.acc_norm = self.acc_norm_plt.plot(self.acc_norm_data)
-        self.acc_x = self.acc_x_plt.plot(self.acc_x_data)
-        self.acc_y = self.acc_y_plt.plot(self.acc_y_data)
-        self.acc_z = self.acc_z_plt.plot(self.acc_z_data)
-
-        ## Window with buttons
-        # self.win_dock = QtGui.QMainWindow()
-        # area = DockArea()
-        # self.win_dock.setCentralWidget(area)
-        # self.win_dock.resize(1000,500)
-        # self.win_dock.setWindowTitle('pyqtgraph example: dockarea')
-        # d1 = Dock("Dock1", size=(1, 1))     ## give this dock the minimum possible size
-        # area.addDock(d1, 'left')      ## place d1 at left edge of dock area (it will fill the whole space since t
-        # w1 = pg.LayoutWidget()
-        # saveBtn = QtGui.QPushButton('Save dock state')
-
-        # def save():
-        #     print("prout")
-        # saveBtn.clicked.connect(save)
-
-        # w1.addWidget(saveBtn, row=1, col=0)
-        # d1.addWidget(w1)
-        # self.win_dock.show()
-
+        ### START 3D
         ## window with 3D view
-        view = gl.GLViewWidget()
-        view.show()
-
+        gl_view = gl.GLViewWidget()
+        
         xgrid = gl.GLGridItem()
         ygrid = gl.GLGridItem()
         zgrid = gl.GLGridItem()
-        view.addItem(xgrid)
-        view.addItem(ygrid)
-        view.addItem(zgrid)
+        gl_view.addItem(xgrid)
+        gl_view.addItem(ygrid)
+        gl_view.addItem(zgrid)
 
         ## rotate x and y grids to face the correct direction
         xgrid.rotate(90, 0, 1, 0)
@@ -132,14 +111,38 @@ class DrawPQT:
         self.axis = gl.GLAxisItem()
 
         # view.addItem(m1)
-        view.addItem(self.axis)
-        view.addItem(self.accel)
+        gl_view.addItem(self.axis)
+        gl_view.addItem(self.accel)
+        ## END OF 3D
+
+        #### START
+        ## Define a top-level widget to hold everything
+        w = QtGui.QWidget()
+
+        ## Create some widgets to be placed inside
+        btn = QtGui.QPushButton('Start')
+        self.text = QtGui.QLineEdit('')
+        btn.clicked.connect(lambda:self.buttonClicked(btn))
+        btn.setCheckable(True)
+
+        ## Create a grid layout to manage the widgets size and position
+        layout = QtGui.QGridLayout()
+        w.setLayout(layout)
+
+        layout.addWidget(gl_view,    0, 0, 2, 3)
+        layout.addWidget(win_scroll, 2, 0, 2, 3)
+        layout.addWidget(btn,        4, 2, 1, 1)
+        layout.addWidget(self.text,  4, 1, 1, 1)
+
+        ## Display the widget as a new window
+        w.show()
+        #### END
 
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
         timer.start(10)
 
-        QtGui.QApplication.instance().exec_()
+        sys.exit(QtGui.QApplication.instance().exec_())
 
 def draw2d(dev, interval, window_width):
     import matplotlib.pyplot as plt
@@ -231,6 +234,15 @@ def draw3d(dev, interval, window_width):
 
     plt.show()
 
+# class NumpyEncoder(json.JSONEncoder):
+#     def default(self, obj):
+#         if isinstance(obj, (list, dict, str, int, float, bool, type(None))):
+#             return json.JSONEncoder.default(self, obj)
+#         # if isinstance(obj, np.ndarray):
+#         #     pass
+#             # return obj.tolist()
+#         return {'_python_object': pickle.dumps(obj)}
+
 class ThreadWrap(threading.Thread):
 
     def __init__(self, device, exit_event):
@@ -238,11 +250,28 @@ class ThreadWrap(threading.Thread):
         self.dev = device
         self.last_frames = {}
         self.exit_event = exit_event
+        self.dump_lock = threading.Lock()
+        self.dump_file = None
 
     def run(self):
         while not exit_event.is_set():
             f = self.dev.next_frame()
+            if self.dump_file:
+                pickle.dump(f, self.dump_file)
+                # self.dump_file.write(pickle.dumps(f))
             self.last_frames[f.__class__] = f
+
+    def start_record(self, name):
+        self.dump_lock.acquire()
+        fname = "{}-{}".format(datetime.datetime.now().strftime('%G%m%d-%H_%M_%S'),name)
+        self.dump_file = open(fname, 'wb')
+        self.dump_lock.release()
+
+    def stop_record(self):
+        self.dump_lock.acquire()
+        self.dump_file.close()
+        self.dump_file = None
+        self.dump_lock.release()
 
     def next_angle(self):
         return self.last_frames[AngleFrame]
