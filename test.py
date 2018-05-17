@@ -13,7 +13,10 @@ import numpy as np
 
 import time
 
-from jy901 import JY901,AngleFrame,AccelFrame,DumbDevice
+from jy901.device import JY901,DumbDevice
+from jy901.frames import AngleFrame,AccelFrame
+
+import jy901.json
 
 verbose_output = False
 
@@ -234,14 +237,6 @@ def draw3d(dev, interval, window_width):
 
     plt.show()
 
-# class NumpyEncoder(json.JSONEncoder):
-#     def default(self, obj):
-#         if isinstance(obj, (list, dict, str, int, float, bool, type(None))):
-#             return json.JSONEncoder.default(self, obj)
-#         # if isinstance(obj, np.ndarray):
-#         #     pass
-#             # return obj.tolist()
-#         return {'_python_object': pickle.dumps(obj)}
 
 class ThreadWrap(threading.Thread):
 
@@ -257,7 +252,8 @@ class ThreadWrap(threading.Thread):
         while not exit_event.is_set():
             f = self.dev.next_frame()
             if self.dump_file:
-                pickle.dump(f, self.dump_file)
+                # pickle.dump(f, self.dump_file)
+                json.dump(f, self.dump_file, cls=jy901.json.JSONEncoder)
                 # self.dump_file.write(pickle.dumps(f))
             self.last_frames[f.__class__] = f
 
