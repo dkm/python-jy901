@@ -63,11 +63,13 @@ class JY901:
     Driver for JY901 device.
     """
 
-    def __init__(self, source):
+    def __init__(self, source, return_content=None):
         """Returns a new JY901 device object. `source` must be read/write object."""
 
         self.source = source
         self.bad_frame = 0
+        if return_content:
+            self.set_return_content(return_content)
 
     def read_frame(self):
         """Returns the next valid frame as a bytearray read from the source."""
@@ -141,6 +143,19 @@ class JY901:
 
         self.source.write(bs)
 
+    def save(self, defaults=False):
+        bs = bytearray()
+
+        bs.append(0xFF)
+        bs.append(0xAA)
+        bs.append(0x00)
+        if defaults:
+            bs.append(1)
+        else:
+            bs.append(0x00)
+        bs.append(0x00)
+        self.source.write(bs)
+
     def set_return_rate(self, hertz):
         """Sets the return rate of the underlying JY901 device."""
 
@@ -165,6 +180,22 @@ class JY901:
         }
         bs.append(convert[hertz])
         bs.append(0)
+        self.source.write(bs)
+
+    def set_calibration(self, mode='exit'):
+        CONV = {
+            'exit': 0,
+            'gyro_acc': 1,
+            'magneto' : 2,
+            'height' : 3
+        }
+        bs = bytearray()
+
+        bs.append(0xFF)
+        bs.append(0xAA)
+        bs.append(0x01)
+        bs.append(CONV[mode])
+        bs.append(0x00)
         self.source.write(bs)
 
     def set_return_content(self, enabled):
