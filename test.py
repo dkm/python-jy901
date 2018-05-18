@@ -58,7 +58,7 @@ class DrawPQT:
         if btn.isChecked():
             btn.setText("Recording")
             self.text.setReadOnly(True)
-            self.dev.start_record(self.text.text())
+            self.dev.start_record(self.text.text(), self.text_descr.text())
         else:
             btn.setText("Start")
             self.text.setReadOnly(False)
@@ -125,6 +125,7 @@ class DrawPQT:
         ## Create some widgets to be placed inside
         btn = QtGui.QPushButton('Start')
         self.text = QtGui.QLineEdit('')
+        self.text_descr = QtGui.QLineEdit('')
         btn.clicked.connect(lambda:self.buttonClicked(btn))
         btn.setCheckable(True)
 
@@ -135,7 +136,8 @@ class DrawPQT:
         layout.addWidget(gl_view,    0, 0, 2, 3)
         layout.addWidget(win_scroll, 2, 0, 2, 3)
         layout.addWidget(btn,        4, 2, 1, 1)
-        layout.addWidget(self.text,  4, 1, 1, 1)
+        layout.addWidget(self.text,  4, 0, 1, 1)
+        layout.addWidget(self.text_descr,  5, 0, 1, 1)
 
         ## Display the widget as a new window
         w.show()
@@ -247,6 +249,7 @@ class ThreadWrap(threading.Thread):
         self.exit_event = exit_event
         self.dump_lock = threading.Lock()
         self.dump_file = None
+        self.sep = ''
 
     def run(self):
         while not exit_event.is_set():
@@ -259,17 +262,18 @@ class ThreadWrap(threading.Thread):
                 # self.dump_file.write(pickle.dumps(f))
             self.last_frames[f.__class__] = f
 
-    def start_record(self, name):
+    def start_record(self, name, descr):
         self.dump_lock.acquire()
         fname = "{}-{}.json".format(datetime.datetime.now().strftime('%G%m%d-%H_%M_%S'),name)
         self.dump_file = open(fname, 'w')
-        self.dump_file.write('[\n')
+        self.dump_file.write('{"desc" : ')
+        self.dump_file.write('{},\n "frames" : [\n'.format(json.dumps(descr)))
         self.sep = ''
         self.dump_lock.release()
 
     def stop_record(self):
         self.dump_lock.acquire()
-        self.dump_file.write(']\n')
+        self.dump_file.write(']\n}\n')
         self.dump_file.close()
         self.dump_file = None
         self.dump_lock.release()
