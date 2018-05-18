@@ -253,18 +253,23 @@ class ThreadWrap(threading.Thread):
             f = self.dev.next_frame()
             if self.dump_file:
                 # pickle.dump(f, self.dump_file)
-                json.dump(f, self.dump_file, cls=jy901.json.JSONEncoder)
+                self.dump_file.write(self.sep)
+                json.dump(f, self.dump_file, cls=jy901.json.JSONEncoder, indent=3)
+                self.sep = ',\n'
                 # self.dump_file.write(pickle.dumps(f))
             self.last_frames[f.__class__] = f
 
     def start_record(self, name):
         self.dump_lock.acquire()
-        fname = "{}-{}".format(datetime.datetime.now().strftime('%G%m%d-%H_%M_%S'),name)
-        self.dump_file = open(fname, 'wb')
+        fname = "{}-{}.json".format(datetime.datetime.now().strftime('%G%m%d-%H_%M_%S'),name)
+        self.dump_file = open(fname, 'w')
+        self.dump_file.write('[\n')
+        self.sep = ''
         self.dump_lock.release()
 
     def stop_record(self):
         self.dump_lock.acquire()
+        self.dump_file.write(']\n')
         self.dump_file.close()
         self.dump_file = None
         self.dump_lock.release()
@@ -283,6 +288,9 @@ parser.add_argument('--dumb-device', action='store_true',
 
 parser.add_argument('--device', type=str, default='/dev/rfcomm0',
                     help='tty device')
+
+parser.add_argument('--frames', type=str, default='time,acceleration,angular,angle',
+                    help='frames types to request from sensor.')
 
 parser.add_argument('--verbose', action='store_true',
                     help='Enable verbose output.')
@@ -315,7 +323,7 @@ if args.dumb_device:
     orig_dev = jy901_dev
 else:
     ser = serial.Serial(args.device, args.rate)
-    jy901_dev = JY901(ser)
+    jy901_dev = JY901(ser, args.frames.split(','))
     orig_dev = jy901_dev
 
 if args.verbose:
